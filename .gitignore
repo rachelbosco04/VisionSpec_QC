@@ -1,0 +1,11 @@
+# Ignore all datasets
+data/
+
+# But keep folder structure if needed
+!data/.gitkeep
+
+venv/
+__pycache__/
+*.pyc
+runs/
+models/
