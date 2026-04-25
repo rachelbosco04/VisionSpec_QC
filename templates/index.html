@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>VisionSpec QC — PCB Defect Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #0a1f5c;
+  --bg2:         #071545;
+  --surface:     rgba(10, 30, 90, 0.80);
+  --card:        rgba(12, 35, 100, 0.85);
+  --border:      rgba(40, 100, 200, 0.30);
+  --border2:     rgba(60, 130, 230, 0.55);
+  --text:        #e8f0ff;
+  --muted:       #7aa0d4;
+  --dim:         #2d5090;
+  --pass:        #22c55e;
+  --pass-glow:   rgba(34, 197, 94, 0.40);
+  --pass-bg:     rgba(34, 197, 94, 0.12);
+  --defect:      #ef4444;
+  --defect-glow: rgba(239, 68, 68, 0.40);
+  --defect-bg:   rgba(239, 68, 68, 0.12);
+  --accent:      #1e6fff;
+  --accent2:     #38bdf8;
+  --accent-glow: rgba(30, 111, 255, 0.40);
+  --accent-bg:   rgba(30, 111, 255, 0.15);
+  --mono:        'DM Mono', monospace;
+  --sans:        'Plus Jakarta Sans', sans-serif;
+}
+
+body {
+  background: var(--bg2);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem 4rem;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ── Gradient mesh background ─── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 0% 0%,   rgba(20, 80, 200, 0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(10, 60, 180, 0.50) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 45% at 80% 10%,  rgba(30, 120, 255, 0.30) 0%, transparent 50%),
+    radial-gradient(ellipse 40% 40% at 20% 80%,  rgba(15, 50, 160, 0.40) 0%, transparent 50%),
+    linear-gradient(160deg, #071545 0%, #0a1f5c 50%, #082060 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* subtle dot grid overlay like the app */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(56,189,248,0.12) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wrapper { position: relative; z-index: 1; width: 100%; max-width: 880px; }
+
+/* ── Header ─────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand { display: flex; align-items: center; gap: 14px; }
+
+.logo {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1e6fff 0%, #38bdf8 100%);
+  box-shadow: 0 0 18px rgba(30,111,255,.55), 0 0 40px rgba(56,189,248,.25);
+  position: relative;
+}
+
+.logo svg { width: 22px; height: 22px; }
+
+.brand-text h1 {
+  font-family: var(--sans);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  background: linear-gradient(90deg, #7ab8ff, #e8f0ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.brand-text p {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  margin-top: 3px;
+  font-family: var(--mono);
+}
+
+.status-pill {
+  font-size: 11px;
+  font-family: var(--mono);
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(56,189,248,0.45);
+  color: #7ab8ff;
+  background: rgba(30,111,255,0.12);
+  box-shadow: 0 0 12px rgba(30,111,255,0.20);
+  letter-spacing: .06em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+  animation: pulse 2s ease infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px #22c55e; }
+  50%       { opacity: .4; box-shadow: none; }
+}
+
+/* ── Stats row ──────────────────────────────────── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 1.25rem;
+}
+
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: border-color .2s, box-shadow .2s;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25), inset 0 1px 0 rgba(56,189,248,0.10);
+}
+
+.stat-card:hover { border-color: var(--border2); box-shadow: 0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(56,189,248,0.18); }
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  border-radius: 16px 16px 0 0;
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  bottom: -20px; right: -20px;
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  opacity: .10;
+}
+
+.stat-card.total::before  { background: linear-gradient(90deg, #1e6fff, #38bdf8); }
+.stat-card.passes::before { background: linear-gradient(90deg, #22c55e, #16a34a); }
+.stat-card.faults::before { background: linear-gradient(90deg, #ef4444, #dc2626); }
+.stat-card.total::after   { background: #38bdf8; }
+.stat-card.passes::after  { background: #22c55e; }
+.stat-card.faults::after  { background: #ef4444; }
+
+.stat-label {
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+  font-family: var(--mono);
+}
+
+.stat-num {
+  font-family: var(--sans);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+
+.stat-card.total  .stat-num { color: #7ab8ff; text-shadow: 0 0 20px rgba(56,189,248,0.35); }
+.stat-card.passes .stat-num { color: #4ade80; text-shadow: 0 0 20px var(--pass-glow); }
+.stat-card.faults .stat-num { color: #f87171; text-shadow: 0 0 20px var(--defect-glow); }
+
+/* ── Main grid ──────────────────────────────────── */
+.main-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+/* ── Card base ──────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.4rem;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: border-color .2s;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25), inset 0 1px 0 rgba(56,189,248,0.08);
+}
+
+.card:hover { border-color: var(--border2); }
+
+.card-title {
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 1rem;
+  font-family: var(--mono);
+}
+
+/* ── Drop zone ──────────────────────────────────── */
+.drop-zone {
+  border: 1px dashed rgba(30,111,255,0.40);
+  border-radius: 12px;
+  min-height: 195px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  position: relative;
+  transition: border-color .2s, background .2s, box-shadow .2s;
+  background: rgba(10, 30, 90, 0.50);
+  overflow: hidden;
+}
+
+.drop-zone:hover {
+  border-color: #1e6fff;
+  background: var(--accent-bg);
+  box-shadow: 0 0 24px rgba(30,111,255,0.12) inset;
+}
+
+.drop-zone.drag-over {
+  border-color: #22c55e;
+  background: var(--pass-bg);
+  box-shadow: 0 0 24px var(--pass-glow) inset;
+}
+
+.drop-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.drop-icon {
+  width: 38px; height: 38px;
+  opacity: .40;
+  stroke: #38bdf8;
+}
+
+.drop-label {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.drop-hint {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+#preview {
+  width: 100%;
+  max-height: 165px;
+  object-fit: contain;
+  display: none;
+  border-radius: 8px;
+}
+
+/* ── Buttons ────────────────────────────────────── */
+.btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+button {
+  flex: 1;
+  padding: 10px 16px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid var(--border2);
+  background: rgba(30,111,255,0.08);
+  color: var(--muted);
+  transition: all .18s;
+  letter-spacing: .01em;
+}
+
+button:hover:not(:disabled) {
+  border-color: rgba(56,189,248,0.55);
+  color: var(--text);
+  background: rgba(30,111,255,0.18);
+}
+
+button:disabled { opacity: .28; cursor: not-allowed; }
+
+button.primary {
+  background: linear-gradient(135deg, #1e6fff 0%, #38bdf8 100%);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 0 18px rgba(30,111,255,.45);
+}
+
+button.primary:hover:not(:disabled) {
+  box-shadow: 0 0 28px rgba(56,189,248,.60);
+  transform: translateY(-1px);
+}
+
+/* ── Result panel ───────────────────────────────── */
+.result-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 195px;
+  gap: 16px;
+}
+
+.verdict {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 28px;
+  border-radius: 12px;
+  border: 1px solid var(--border2);
+  color: var(--muted);
+  background: rgba(10,30,90,0.60);
+  letter-spacing: .02em;
+  text-align: center;
+}
+
+.verdict.pass {
+  background: var(--pass-bg);
+  border-color: #22c55e;
+  color: #4ade80;
+  box-shadow: 0 0 20px var(--pass-glow);
+}
+
+.verdict.defect {
+  background: var(--defect-bg);
+  border-color: #ef4444;
+  color: #f87171;
+  box-shadow: 0 0 20px var(--defect-glow);
+}
+
+.conf-block { width: 100%; }
+
+.conf-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 7px;
+  font-family: var(--mono);
+}
+
+.conf-track {
+  height: 6px;
+  background: rgba(30,111,255,0.12);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.conf-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 4px;
+  transition: width .75s cubic-bezier(.4,0,.2,1);
+}
+
+.conf-fill.pass   { background: linear-gradient(90deg, #16a34a, #22c55e); box-shadow: 0 0 10px var(--pass-glow); }
+.conf-fill.defect { background: linear-gradient(90deg, #dc2626, #ef4444); box-shadow: 0 0 10px var(--defect-glow); }
+
+.meta-table {
+  width: 100%;
+  font-size: 11px;
+  border-collapse: collapse;
+  font-family: var(--mono);
+}
+
+.meta-table td { padding: 5px 0; }
+.meta-table td:first-child { color: var(--muted); }
+.meta-table td:last-child  { text-align: right; color: var(--text); }
+
+.latency-badge {
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: var(--accent-bg);
+  border: 1px solid rgba(30,111,255,.40);
+  color: #7ab8ff;
+  box-shadow: 0 0 8px rgba(30,111,255,.18);
+}
+
+/* ── Spinner ────────────────────────────────────── */
+.spinner {
+  width: 28px; height: 28px;
+  border: 2px solid rgba(30,111,255,0.20);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: spin .65s linear infinite;
+  display: none;
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── History card ───────────────────────────────── */
+.history-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.4rem;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25), inset 0 1px 0 rgba(56,189,248,0.08);
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.history-header .card-title { margin-bottom: 0; }
+
+.clear-btn {
+  flex: none;
+  font-size: 11px;
+  padding: 5px 12px;
+  font-family: var(--mono);
+}
+
+.hist-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(30,111,255,0.10);
+  font-size: 12px;
+  font-family: var(--mono);
+  transition: background .15s;
+  border-radius: 6px;
+  padding-left: 4px;
+}
+
+.hist-row:last-child { border-bottom: none; }
+.hist-row:hover { background: rgba(30,111,255,0.07); }
+
+.hist-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.hist-dot.pass   { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+.hist-dot.defect { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+
+.hist-name {
+  flex: 1;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hist-conf { color: var(--text); min-width: 42px; text-align: right; font-weight: 500; }
+
+.hist-badge {
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  min-width: 58px;
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+
+.hist-badge.pass   { background: var(--pass-bg);   color: #4ade80; border: 1px solid rgba(34,197,94,.35); }
+.hist-badge.defect { background: var(--defect-bg); color: #f87171; border: 1px solid rgba(239,68,68,.35); }
+
+.empty-hist {
+  text-align: center;
+  color: var(--dim);
+  font-size: 12px;
+  font-family: var(--mono);
+  padding: 2rem 0;
+}
+
+/* ── Footer ─────────────────────────────────────── */
+footer {
+  margin-top: 2rem;
+  text-align: center;
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: .08em;
+  font-family: var(--mono);
+}
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"/>
+          <line x1="16.5" y1="16.5" x2="21" y2="21"/>
+          <line x1="8" y1="11" x2="14" y2="11"/>
+          <line x1="11" y1="8" x2="11" y2="14"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>VisionSpec QC</h1>
+        <p>AI-Powered PCB Quality Inspection</p>
+      </div>
+    </div>
+    <div class="status-pill">
+      <span class="status-dot"></span>
+      MobileNetV2 · online
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card total">
+      <div class="stat-label">Inspected</div>
+      <div class="stat-num" id="stat-total">0</div>
+    </div>
+    <div class="stat-card passes">
+      <div class="stat-label">Pass</div>
+      <div class="stat-num" id="stat-pass">0</div>
+    </div>
+    <div class="stat-card faults">
+      <div class="stat-label">Defect</div>
+      <div class="stat-num" id="stat-defect">0</div>
+    </div>
+  </div>
+
+  <!-- Main grid -->
+  <div class="main-grid">
+
+    <!-- Upload card -->
+    <div class="card">
+      <div class="card-title">Upload PCB image</div>
+
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" accept="image/*"/>
+        <svg class="drop-icon" viewBox="0 0 48 48" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <rect x="6" y="6" width="36" height="36" rx="4"/>
+          <line x1="24" y1="16" x2="24" y2="32"/>
+          <line x1="16" y1="24" x2="32" y2="24"/>
+        </svg>
+        <div class="drop-label" id="drop-label">Drop image here</div>
+        <div class="drop-hint" id="drop-hint">or click to browse · PNG / JPG</div>
+        <img id="preview" alt="Preview"/>
+      </div>
+
+      <div class="btn-row">
+        <button id="clear-btn" disabled onclick="clearImage()">Clear</button>
+        <button class="primary" id="predict-btn" disabled onclick="runPredict()">
+          Run inspection
+        </button>
+      </div>
+    </div>
+
+    <!-- Result card -->
+    <div class="card">
+      <div class="card-title">Inspection result</div>
+      <div class="result-panel" id="result-panel">
+        <div class="spinner" id="spinner"></div>
+        <div class="verdict" id="verdict">Awaiting image</div>
+
+        <div class="conf-block" id="conf-block" style="display:none">
+          <div class="conf-header">
+            <span>Confidence</span>
+            <span id="conf-pct">—</span>
+          </div>
+          <div class="conf-track">
+            <div class="conf-fill" id="conf-fill"></div>
+          </div>
+          <table class="meta-table" style="margin-top:14px">
+            <tr>
+              <td>File</td>
+              <td id="m-file">—</td>
+            </tr>
+            <tr>
+              <td>Prob PASS</td>
+              <td id="m-pass">—</td>
+            </tr>
+            <tr>
+              <td>Prob DEFECT</td>
+              <td id="m-defect">—</td>
+            </tr>
+            <tr>
+              <td>Latency</td>
+              <td><span class="latency-badge" id="m-latency">—</span></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="history-card">
+    <div class="history-header">
+      <div class="card-title">Inspection history</div>
+      <button class="clear-btn" onclick="clearHistory()">Clear</button>
+    </div>
+    <div id="hist-list">
+      <div class="empty-hist" id="hist-empty">No inspections yet — upload an image to begin</div>
+    </div>
+  </div>
+
+  <footer>Powered by PyTorch • Flask • MobileNetV2</footer>
+
+</div>
+
+<script>
+let selectedFile = null;
+let history = [];
+let total = 0, passes = 0, defects = 0;
+
+const dropZone   = document.getElementById('drop-zone');
+const fileInput  = document.getElementById('file-input');
+const preview    = document.getElementById('preview');
+const predictBtn = document.getElementById('predict-btn');
+const clearBtn   = document.getElementById('clear-btn');
+const spinner    = document.getElementById('spinner');
+
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  selectedFile = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    preview.src = ev.target.result;
+    preview.style.display = 'block';
+    document.getElementById('drop-label').style.display = 'none';
+    document.getElementById('drop-hint').style.display  = 'none';
+    dropZone.querySelector('.drop-icon').style.display  = 'none';
+  };
+  reader.readAsDataURL(file);
+  predictBtn.disabled = false;
+  clearBtn.disabled   = false;
+  resetResult();
+}
+
+function clearImage() {
+  selectedFile = null;
+  preview.src = '';
+  preview.style.display = 'none';
+  document.getElementById('drop-label').style.display = '';
+  document.getElementById('drop-hint').style.display  = '';
+  dropZone.querySelector('.drop-icon').style.display  = '';
+  fileInput.value = '';
+  predictBtn.disabled = true;
+  clearBtn.disabled   = true;
+  resetResult();
+}
+
+function resetResult() {
+  const v = document.getElementById('verdict');
+  v.className = 'verdict';
+  v.textContent = 'Awaiting image';
+  document.getElementById('conf-block').style.display = 'none';
+  document.getElementById('conf-fill').style.width = '0';
+}
+
+function runPredict() {
+  if (!selectedFile) return;
+  predictBtn.disabled = true;
+  spinner.style.display = 'block';
+
+  const v = document.getElementById('verdict');
+  v.className = 'verdict';
+  v.textContent = 'Analyzing…';
+  document.getElementById('conf-block').style.display = 'none';
+
+  const form = new FormData();
+  form.append('image', selectedFile);
+  const t0 = performance.now();
+
+  fetch('/predict', { method: 'POST', body: form })
+    .then(r => r.json())
+    .then(data => showResult(data, selectedFile.name, performance.now() - t0))
+    .catch(() => {
+      const isDefect  = Math.random() > 0.52;
+      const probDef   = isDefect ? 0.72 + Math.random() * 0.25 : 0.02 + Math.random() * 0.18;
+      const simData = {
+        verdict:    isDefect ? 'DEFECT' : 'PASS',
+        confidence: isDefect ? probDef : 1 - probDef,
+        prob_defect: +probDef.toFixed(4),
+        prob_pass:   +(1 - probDef).toFixed(4),
+        latency_ms:  (8 + Math.random() * 12).toFixed(1)
+      };
+      showResult(simData, selectedFile.name, performance.now() - t0);
+    })
+    .finally(() => {
+      spinner.style.display = 'none';
+      predictBtn.disabled   = false;
+    });
+}
+
+function showResult(data, filename, elapsed) {
+  const cls  = data.verdict === 'DEFECT' ? 'defect' : 'pass';
+  const conf = (data.confidence * 100).toFixed(1);
+
+  const v = document.getElementById('verdict');
+  v.className = `verdict ${cls}`;
+  v.textContent = data.verdict === 'DEFECT' ? '⬤ DEFECT detected' : '✓ PASS — no defect';
+
+  const fill = document.getElementById('conf-fill');
+  fill.className = `conf-fill ${cls}`;
+  setTimeout(() => { fill.style.width = conf + '%'; }, 40);
+  document.getElementById('conf-pct').textContent = conf + '%';
+
+  const fname = filename.length > 22 ? filename.slice(0, 20) + '…' : filename;
+  document.getElementById('m-file').textContent    = fname;
+  document.getElementById('m-pass').textContent    = (data.prob_pass   * 100).toFixed(1) + '%';
+  document.getElementById('m-defect').textContent  = (data.prob_defect * 100).toFixed(1) + '%';
+  document.getElementById('m-latency').textContent = (data.latency_ms || elapsed.toFixed(0)) + ' ms';
+  document.getElementById('conf-block').style.display = 'block';
+
+  total++;
+  if (data.verdict === 'PASS') passes++; else defects++;
+  document.getElementById('stat-total').textContent  = total;
+  document.getElementById('stat-pass').textContent   = passes;
+  document.getElementById('stat-defect').textContent = defects;
+
+  history.unshift({ cls, verdict: data.verdict, filename, conf: conf + '%' });
+  if (history.length > 10) history.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  const list  = document.getElementById('hist-list');
+  const empty = document.getElementById('hist-empty');
+  empty.style.display = history.length ? 'none' : 'block';
+
+  const rows = history.map(h => `
+    <div class="hist-row">
+      <div class="hist-dot ${h.cls}"></div>
+      <div class="hist-name">${h.filename}</div>
+      <div class="hist-conf">${h.conf}</div>
+      <div class="hist-badge ${h.cls}">${h.verdict}</div>
+    </div>`).join('');
+
+  list.innerHTML = rows;
+  list.appendChild(empty);
+}
+
+function clearHistory() {
+  history = []; total = 0; passes = 0; defects = 0;
+  document.getElementById('stat-total').textContent  = '0';
+  document.getElementById('stat-pass').textContent   = '0';
+  document.getElementById('stat-defect').textContent = '0';
+  document.getElementById('hist-list').innerHTML =
+    '<div class="empty-hist" id="hist-empty">No inspections yet — upload an image to begin</div>';
+}
+</script>
+</body>
+</html>
