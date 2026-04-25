@@ -1,33 +1,54 @@
-# VisionSpec QC — Week 1 (Dataset Preparation & Validation)
+# VisionSpec QC — AI-Powered PCB Defect Detection
 
-## Project Overview
+VisionSpec QC is an end-to-end deep learning project built to automate Printed Circuit Board (PCB) quality inspection using computer vision.
 
-VisionSpec QC is an AI-powered PCB Quality Control system designed to classify **PASS** vs **DEFECT** PCB image regions for automated manufacturing inspection.
+The system classifies PCB images into:
 
-This Week 1 branch focuses on building a strong and production-ready dataset pipeline.
+* **PASS** — No visible defect
+* **DEFECT** — Fault detected
 
----
+## Key Highlights
 
-# Week 1 Objectives Completed
+* Built using **PyTorch** with transfer learning
+* Trained **MobileNetV2 / ResNet50** models
+* Achieved **96.68% test accuracy** and **0.995 AUC-ROC**
+* Implemented **Grad-CAM** for model interpretability
+* Developed **Flask inference API** for real-time predictions
+* Designed modern **Glassmorphism Dashboard UI**
+* Achieved **~35 ms average latency** and **~28 FPS**
 
-✅ Dataset inspection and validation  
-✅ PASS image generation from clean PCB regions  
-✅ PASS image cleaning and filtering  
-✅ Balanced PASS vs DEFECT dataset creation  
-✅ Train / Validation / Test split generation  
-✅ Realistic augmentation verification  
-✅ Dataset statistics visualization
+## Features
 
----
+* Upload PCB images for instant inspection
+* PASS / DEFECT prediction with confidence score
+* Real-time latency display
+* Inspection history tracking
+* Responsive web dashboard
 
-# Dataset Summary
+## Tech Stack
 
-| Class   | Images |
-|--------|--------|
-| PASS   | 3408 |
-| DEFECT | 3408 |
+* Python
+* PyTorch
+* OpenCV
+* Flask
+* HTML / CSS / JavaScript
+* Git / GitHub
 
-Balanced dataset created for fair model training.
+## Run Project
 
+```bash
+pip install -r requirements.txt
+python src/inference.py --weights outputs/logs/week2/mobilenetv2_head_best.pth --arch mobilenetv2
+```
+
+Open:
+
+```text
+http://localhost:5000
+```
+
+## Applications
+
+PCB manufacturing, smart factory automation, defect screening, electronics quality assurance.
 
 
