@@ -1,0 +1,21 @@
+{
+  "run_name": "mobilenetv2_head_0425_1642",
+  "arch": "mobilenetv2",
+  "phase": "head",
+  "best_weights": "outputs\\logs\\week2\\mobilenetv2_head_0425_1642_best.pth",
+  "epochs_run": 5,
+  "best_epoch": 3,
+  "test_acc": 0.966796875,
+  "test_auc": 0.99517822265625,
+  "avg_precision": 0.9948006488008276,
+  "cm": [
+    [
+      500,
+      12
+    ],
+    [
+      22,
+      490
+    ]
+  ]
+}
